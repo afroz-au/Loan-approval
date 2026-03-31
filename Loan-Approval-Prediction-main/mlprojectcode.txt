@@ -1,0 +1,192 @@
+import numpy as np
+import pandas as pd
+from sklearn.model_selection import train_test_split, RandomizedSearchCV
+from sklearn.preprocessing import StandardScaler
+from sklearn.svm import SVC
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
+from sklearn.metrics import accuracy_score, roc_auc_score
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import GridSearchCV
+from sklearn import metrics
+
+import matplotlib.pyplot as plt 
+!pip install xgboost
+import xgboost as xgb
+from xgboost import XGBClassifier
+
+
+
+
+loan_train = pd.read_csv(r"D:\2-2\ML\train_csv.csv")
+print(loan_train.shape)
+print(loan_train.head())
+
+
+
+total_null=loan_train.isnull().sum().sort_values(ascending=False)
+print(total_null.head(10))
+
+
+
+
+loan_train['Gender'] = loan_train['Gender'].fillna( loan_train['Gender'].dropna( ).mode().values[0] )
+loan_train['Married'] = loan_train['Married'].fillna( loan_train['Married'].dropna( ).mode().values[0] ) 
+loan_train['Dependents'] = loan_train['Dependents'].fillna(
+loan_train['Dependents'].dropna( ).mode().values[0])
+loan_train['Self_Employed'] = loan_train['Self_Employed'].fillna(
+loan_train['Self_Employed'].dropna( ).mode().values[0] )
+loan_train['LoanAmount'] = loan_train['LoanAmount'].fillna(loan_train['LoanAmount'].dropna( ).mean())
+loan_train['Loan_Amount_Term'] = loan_train['Loan_Amount_Term'].fillna(
+loan_train['Loan_Amount_Term'].dropna( ).mode().values[0] )
+loan_train['Credit_History'] = loan_train['Credit_History'].fillna(
+loan_train['Credit_History'].dropna( ).mode().values[0] )
+
+
+
+
+loan_train.info()
+
+
+
+
+
+print(set(loan_train['Gender'].values.tolist()))
+print(set(loan_train['Dependents'].values.tolist()))
+print(set(loan_train['Married'].values.tolist()))
+print(set(loan_train['Education'].values.tolist()))
+print(set(loan_train['Self_Employed'].values.tolist()))
+print(set(loan_train['Loan_Status'].values.tolist()))
+print(set(loan_train['Property_Area'].values.tolist()))
+
+
+
+loan_train['Loan_Status'] = loan_train['Loan_Status'].map({'N':0,'Y':1}).astype(int)
+loan_train = pd.get_dummies(loan_train,columns = ['Gender' , 'Dependents', 'Married','Education',
+                                                 'Self_Employed','Property_Area'])
+standardScaler = StandardScaler()
+columns_to_scale = ['ApplicantIncome','CoapplicantIncome','LoanAmount','Loan_Amount_Term']
+loan_train[columns_to_scale]=standardScaler.fit_transform(loan_train[columns_to_scale])
+print(loan_train.info())
+
+
+y=loan_train['Loan_Status']
+X=loan_train.drop(['Loan_Status','Loan_ID'],axis=1)
+X_train,X_test,y_train,y_test=train_test_split(X,y,test_size=0.2,random_state=42)
+
+
+
+gbm_param_grid = {
+        'n_estimators': range(1,1000, 10), 
+        'max_depth': range(1, 20),
+        'learning_rate': [.1,.4, .45, .5, .55, .6], 
+        'colsample_bytree': [.6, .7, .8, .9, 1],
+}
+
+xgb_classifier = XGBClassifier()
+xgb_random = RandomizedSearchCV(param_distributions=gbm_param_grid,
+                                estimator = xgb_classifier, scoring = "accuracy",
+                                verbose = 0, n_iter = 100, cv = 4)
+
+xgb_random.fit(X_train,y_train)
+print(f'Best parameters: {xgb_random.best_params_}')
+y_pred = xgb_random.predict(X_test)
+print(f'Accuracy: {np.sum(y_pred==y_test)/len(y_test)}')
+
+
+
+
+
+
+param_grid = {
+    'max_depth': range(4,25),
+    'min_samples_leaf' : range(10,100,10), 
+    'min_samples_split' : range(10, 100, 10),
+    'criterion': ['gini', 'entropy']
+}
+n_folds = 5
+
+dt = DecisionTreeClassifier(random_state=np.random.randint(0,100))
+dt_grid = GridSearchCV(dt, param_grid, cv = n_folds, return_train_score=True, verbose=0)
+dt_grid.fit(X_train,y_train)
+print(dt_grid.best_params_)
+# {'criterion': 'gini', 'max_depth': 4, 'min_samples_leaf': 20, 'min_samples_split': 10}
+y_pred_best=dt_grid.predict(X_test)
+acc = metrics.accuracy_score(y_test, y_pred_best)
+print(acc)
+# 0.7804878048780488
+
+
+
+
+rf_param_grid = {
+     'n_estimators': range(1,1000, 100),
+}
+rf = RandomForestClassifier()
+rf_random = RandomizedSearchCV(param_distributions=rf_param_grid,
+                               estimator = rf, scoring = "accuracy", 
+                               verbose = 0, n_iter = 100, cv = 4)
+
+
+rf_random.fit(X_train,y_train)
+best_params = rf_random.best_params_ 
+print(f'Best parameters: {best_params}')
+# Best parameters: {'n_estimators': 101}
+y_pred1 = rf_random.predict(X_test)
+print(f'Accuracy: {np.sum(y_pred1==y_test)/len(y_test)}')
+# Accuracy: 0.7886178861788617
+
+
+
+
+
+svm_param_grid = {
+       'kernel': ['linear', 'poly', 'rbf', 'sigmoid'],
+       'C': range(1,11)
+       }
+svm = SVC()
+
+svm_random = RandomizedSearchCV(param_distributions=svm_param_grid,
+                                estimator = svm, scoring = "accuracy",
+                                verbose = 0, n_iter = 100, cv = 4)
+svm_random.fit(X_train,y_train)
+best_params = svm_random.best_params_ 
+print(f'Best parameters: {best_params}')
+# Best parameters: {'kernel': 'linear', 'C': 1}
+y_pred_best=svm_random.predict(X_test)
+acc = metrics.accuracy_score(y_test,y_pred_best)
+print(acc)
+# 0.788638980231
+
+
+
+
+
+
+def feature_imp(df,model):
+    feat = pd.DataFrame(columns=['feature', 'importance']) 
+    feat["feature"] = df.columns
+    feat["importance"] = model.best_estimator_.feature_importances_ 
+    return feat.sort_values(by="importance", ascending=False)
+
+
+
+
+feature_imp(X_train,dt_grid).plot('feature','importance','barh',
+                                    figsize=(10,7),legend =False)
+
+
+
+feature_imp(X_train,rf_random).plot('feature','importance','barh',
+                                    figsize=(10,7),legend =False)
+
+
+def feature_imp_svm(df, model):
+    feat = pd.DataFrame(columns=['feature', 'coefficients']) 
+    feat["feature"] = df.columns
+    feat["coefficients"] = model.best_estimator_.coef_[0]
+    feat['coefficients_abs'] = np.abs(feat['coefficients'])
+    return feat.sort_values(by="coefficients_abs", ascending=False)
+
+# Call the function with the SVM model
+feature_imp_svm(X_train, svm_random).plot('feature', 'coefficients_abs', 'barh', figsize=(10, 7), legend=False)
